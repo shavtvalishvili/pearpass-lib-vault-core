@@ -13,16 +13,19 @@ import {
   closeAllInstances,
   closeVaultsInstance,
   createInvite,
+  createReadOnlyShareLink,
   deleteInvite,
   encryptionAdd,
   encryptionClose,
   encryptionGet,
   encryptionInit,
+  getActiveVaultWritable,
   getIsActiveVaultInitialized,
   getIsEncryptionInitialized,
   getIsVaultsInitialized,
   initActiveVaultInstance,
   initListener,
+  joinReadOnlyVault,
   resumeAllInstances,
   suspendAllInstances,
   pairActiveVault,
@@ -843,6 +846,53 @@ export const handleRpcCommand = async (req) => {
         req.reply(
           JSON.stringify({
             error: `Error resuming instances: ${error}`
+          })
+        )
+      }
+
+      break
+
+    case API.ACTIVE_VAULT_CREATE_READ_ONLY_SHARE:
+      try {
+        const shareLink = await createReadOnlyShareLink()
+
+        req.reply(JSON.stringify({ data: shareLink }))
+      } catch (error) {
+        req.reply(
+          JSON.stringify({
+            error: `Error creating read-only share link: ${error}`
+          })
+        )
+      }
+
+      break
+
+    case API.JOIN_READ_ONLY_VAULT:
+      try {
+        const { vaultId, key, encryptionKey } = requestData
+
+        const encKey = await joinReadOnlyVault(vaultId, key, encryptionKey)
+
+        req.reply(JSON.stringify({ data: { encryptionKey: encKey } }))
+      } catch (error) {
+        req.reply(
+          JSON.stringify({
+            error: `Error joining read-only vault: ${error}`
+          })
+        )
+      }
+
+      break
+
+    case API.GET_ACTIVE_VAULT_WRITABLE:
+      try {
+        const writable = getActiveVaultWritable()
+
+        req.reply(JSON.stringify({ data: { writable } }))
+      } catch (error) {
+        req.reply(
+          JSON.stringify({
+            error: `Error getting vault writable status: ${error}`
           })
         )
       }

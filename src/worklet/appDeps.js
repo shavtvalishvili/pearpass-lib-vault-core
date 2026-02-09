@@ -4,6 +4,7 @@ import b4a from 'b4a'
 import barePath from 'bare-path'
 import BlindEncryptionSodium from 'blind-encryption-sodium'
 import Corestore from 'corestore'
+import z32 from 'z32'
 
 import { getForbiddenRoots } from './getForbiddenRoots'
 import { PearPassPairer } from './pearpassPairer'
@@ -877,4 +878,83 @@ export const removeAllBlindMirrors = async () => {
 export const getHashedPassword = async () => {
   const masterEncryption = await vaultsGet('masterEncryption')
   return masterEncryption?.hashedPassword
+}
+
+/**
+ * Creates a read-only share link for the active vault.
+ * The link contains the vault ID and z32-encoded keys.
+ * @returns {Promise<string>} The share link in format: {vaultId}/ro/{key}/{encryptionKey}
+ */
+export const createReadOnlyShareLink = async () => {
+  if (!isActiveVaultInitialized) {
+    throw new Error('[createReadOnlyShareLink]: Vault not initialised')
+  }
+
+  const response = await activeVaultInstance.get('vault')
+  const { value: vault } = response || {}
+
+  if (!vault) {
+    throw new Error('[createReadOnlyShareLink]: Vault not found')
+  }
+
+  const parsedVault = JSON.parse(vault)
+  const vaultId = parsedVault.id
+
+  const key = z32.encode(activeVaultInstance.key)
+  const encryptionKey = z32.encode(activeVaultInstance.encryptionKey)
+
+  return `${vaultId}/ro/${key}/${encryptionKey}`
+}
+
+/**
+ * Joins a vault in read-only mode using the provided key and encryption key.
+ * This creates an Autopass instance that can read but not write.
+ * @param {string} vaultId - The vault ID
+ * @param {string} keyZ32 - The z32-encoded Autopass key
+ * @param {string} encryptionKeyZ32 - The z32-encoded encryption key
+ * @returns {Promise<string>} The encryption key in base64 format
+ */
+export const joinReadOnlyVault = async (vaultId, keyZ32, encryptionKeyZ32) => {
+  if (isActiveVaultInitialized) {
+    await closeActiveVaultInstance()
+  }
+
+  const key = z32.decode(keyZ32)
+  const encryptionKey = z32.decode(encryptionKeyZ32)
+
+  const fullPath = buildPath(`vault/${vaultId}`)
+  const store = new Corestore(fullPath)
+
+  const hashedPassword = await getHashedPassword()
+  const conf = await getConfig(store)
+
+  activeVaultInstance = new Autopass(store, {
+    key: key,
+    encryptionKey: encryptionKey,
+    blindEncryption: hashedPassword
+      ? new BlindEncryptionSodium(b4a.alloc(32, hashedPassword, 'utf-8'))
+      : undefined,
+    relayThrough: conf.current.blindRelays
+  })
+
+  await activeVaultInstance.ready()
+  isActiveVaultInitialized = true
+
+  // Cache for restart (though read-only vaults need special handling)
+  lastActiveVaultId = vaultId
+  lastActiveVaultEncryptionKey = encryptionKey.toString('base64')
+
+  return encryptionKey.toString('base64')
+}
+
+/**
+ * Returns whether the active vault is writable.
+ * @returns {boolean} True if the vault is writable, false if read-only
+ */
+export const getActiveVaultWritable = () => {
+  if (!isActiveVaultInitialized) {
+    return false
+  }
+
+  return activeVaultInstance.writable
 }
