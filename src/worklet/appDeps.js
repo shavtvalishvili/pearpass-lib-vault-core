@@ -940,6 +940,26 @@ export const joinReadOnlyVault = async (vaultId, keyZ32, encryptionKeyZ32) => {
   await activeVaultInstance.ready()
   isActiveVaultInitialized = true
 
+  // Wait for vault data to sync from the network
+  const maxAttempts = 30
+  const delayMs = 1000
+  let vault = null
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const response = await activeVaultInstance.get('vault')
+    if (response?.value) {
+      vault = JSON.parse(response.value)
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+
+  if (!vault) {
+    throw new Error(
+      '[joinReadOnlyVault]: Timeout waiting for vault data to sync'
+    )
+  }
+
   // Cache for restart (though read-only vaults need special handling)
   lastActiveVaultId = vaultId
   lastActiveVaultEncryptionKey = encryptionKey.toString('base64')
