@@ -751,21 +751,6 @@ export class PearpassVaultClient extends EventEmitter {
   }
 
   /**
-   * Joins a vault in read-only mode.
-   * @param {Object} params
-   * @param {string} params.vaultId - The vault ID
-   * @param {string} params.key - The z32-encoded Autopass key
-   * @param {string} params.encryptionKey - The z32-encoded encryption key
-   * @returns {Promise<Object>}
-   */
-  async joinReadOnlyVault({ vaultId, key, encryptionKey }) {
-    return this._handleRequest({
-      command: API.JOIN_READ_ONLY_VAULT,
-      data: { vaultId, key, encryptionKey }
-    })
-  }
-
-  /**
    * Gets whether the active vault is writable.
    * @returns {Promise<{writable: boolean}>}
    */

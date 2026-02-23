@@ -6,7 +6,6 @@ import barePath from 'bare-path'
 import BlindEncryptionSodium from 'blind-encryption-sodium'
 import Corestore from 'corestore'
 import sodium from 'sodium-native'
-import z32 from 'z32'
 
 import { getForbiddenRoots } from './getForbiddenRoots'
 import { PearPassPairer } from './pearpassPairer'
@@ -894,14 +893,16 @@ export const getHashedPassword = async () => {
 }
 
 /**
- * Creates a read-only share link for the active vault.
- * The link contains the vault ID and z32-encoded keys.
- * @returns {Promise<string>} The share link in format: {vaultId}/ro/{key}/{encryptionKey}
+ * Creates a read-only share link for the active vault using native autopass invites.
+ * @returns {Promise<string>} The share link in format: {vaultId}/ro/{inviteCode}
  */
 export const createReadOnlyShareLink = async () => {
   if (!isActiveVaultInitialized) {
     throw new Error('[createReadOnlyShareLink]: Vault not initialised')
   }
+
+  await activeVaultInstance.deleteInvite()
+  const inviteCode = await activeVaultInstance.createInvite({ readOnly: true })
 
   const response = await activeVaultInstance.get('vault')
   const { value: vault } = response || {}
@@ -913,71 +914,7 @@ export const createReadOnlyShareLink = async () => {
   const parsedVault = JSON.parse(vault)
   const vaultId = parsedVault.id
 
-  const key = z32.encode(activeVaultInstance.key)
-  const encryptionKey = z32.encode(activeVaultInstance.encryptionKey)
-
-  return `${vaultId}/ro/${key}/${encryptionKey}`
-}
-
-/**
- * Joins a vault in read-only mode using the provided key and encryption key.
- * This creates an Autopass instance that can read but not write.
- * @param {string} vaultId - The vault ID
- * @param {string} keyZ32 - The z32-encoded Autopass key
- * @param {string} encryptionKeyZ32 - The z32-encoded encryption key
- * @returns {Promise<string>} The encryption key in base64 format
- */
-export const joinReadOnlyVault = async (vaultId, keyZ32, encryptionKeyZ32) => {
-  if (isActiveVaultInitialized) {
-    await closeActiveVaultInstance()
-  }
-
-  const key = z32.decode(keyZ32)
-  const encryptionKey = z32.decode(encryptionKeyZ32)
-
-  const fullPath = buildPath(`vault/${vaultId}`)
-  const store = new Corestore(fullPath)
-
-  const hashedPassword = await getHashedPassword()
-  const conf = await getConfig(store)
-
-  activeVaultInstance = new Autopass(store, {
-    key: key,
-    encryptionKey: encryptionKey,
-    blindEncryption: hashedPassword
-      ? new BlindEncryptionSodium(b4a.alloc(32, hashedPassword, 'utf-8'))
-      : undefined,
-    relayThrough: conf.current.blindRelays
-  })
-
-  await activeVaultInstance.ready()
-  isActiveVaultInitialized = true
-
-  // Wait for vault data to sync from the network
-  const maxAttempts = 30
-  const delayMs = 1000
-  let vault = null
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const response = await activeVaultInstance.get('vault')
-    if (response?.value) {
-      vault = JSON.parse(response.value)
-      break
-    }
-    await new Promise((resolve) => setTimeout(resolve, delayMs))
-  }
-
-  if (!vault) {
-    throw new Error(
-      '[joinReadOnlyVault]: Timeout waiting for vault data to sync'
-    )
-  }
-
-  // Cache for restart (though read-only vaults need special handling)
-  lastActiveVaultId = vaultId
-  lastActiveVaultEncryptionKey = encryptionKey.toString('base64')
-
-  return encryptionKey.toString('base64')
+  return `${vaultId}/ro/${inviteCode}`
 }
 
 /**

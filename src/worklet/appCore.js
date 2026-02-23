@@ -25,7 +25,6 @@ import {
   getIsVaultsInitialized,
   initActiveVaultInstance,
   initListener,
-  joinReadOnlyVault,
   resumeAllInstances,
   suspendAllInstances,
   pairActiveVault,
@@ -941,23 +940,6 @@ export const handleRpcCommand = async (req) => {
         req.reply(
           JSON.stringify({
             error: `Error creating read-only share link: ${error}`
-          })
-        )
-      }
-
-      break
-
-    case API.JOIN_READ_ONLY_VAULT:
-      try {
-        const { vaultId, key, encryptionKey } = requestData
-
-        const encKey = await joinReadOnlyVault(vaultId, key, encryptionKey)
-
-        req.reply(JSON.stringify({ data: { encryptionKey: encKey } }))
-      } catch (error) {
-        req.reply(
-          JSON.stringify({
-            error: `Error joining read-only vault: ${error}`
           })
         )
       }
